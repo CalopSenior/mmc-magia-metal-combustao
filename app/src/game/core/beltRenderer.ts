@@ -2,7 +2,7 @@ import { drawMatrix, structurePalette, type PixelMatrix } from '../content/pixel
 import { CELL_SIZE } from '../math/grid'
 import type { HexDirection, Structure } from '../types'
 import type { Camera } from './camera'
-import { connectionForLane, outputDirections, portStub, type Connection, type Point, type StructureLookup } from './structureGeometry'
+import { connectionForLane, outputDirections, outputTargetCell, portStub, type Connection, type Point, type StructureLookup } from './structureGeometry'
 
 const PIXEL = CELL_SIZE / 16
 const HALF_WIDTH = 3.5
@@ -75,6 +75,14 @@ export class BeltRasterCache {
   draw(context: CanvasRenderingContext2D, structures: readonly Structure[], lookup: StructureLookup, camera: Camera, frame: number): void {
     let a = 0x811c9dc5, b = 0x01000193
     for (const s of structures) {
+      // Floors and lanterns never carry anything, and a golem walking between deposits has no belt to move: neither may
+      // force a full re-rasterisation of the network every time it takes a step.
+      if (s.type === 'paving' || s.type === 'lantern') continue
+      if (s.type === 'golem') {
+        const target = outputTargetCell(s, s.direction)
+        const neighbour = lookup(target.q, target.r)
+        if (!neighbour || neighbour.type === 'paving' || neighbour.type === 'lantern') continue
+      }
       const parts = [s.id, TYPE_IDS.get(s.type) ?? TYPE_IDS.set(s.type, TYPE_IDS.size + 1).get(s.type)!, s.q, s.r, s.size ?? 1, s.direction, s.prismOutputCount]
       for (const part of parts) { a = Math.imul(a ^ part, 0x01000193); b = Math.imul(b + part + 0x9e3779b9, 0x85ebca6b); b ^= b >>> 13 }
     }
