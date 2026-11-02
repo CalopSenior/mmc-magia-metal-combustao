@@ -1,0 +1,15 @@
+{
+  "atlas": "credits-artificers-atlas.png",
+  "overrides": {
+    "daniela": {
+      "file": "daniela-artificer-v5.png",
+      "layout": "portrait"
+    },
+    "gabriel": "credits-artificers-corrections.png",
+    "marilia": {
+      "file": "marilia-photo-likeness-v7.png",
+      "layout": "portrait",
+      "crop": { "x": 0.05, "y": 0, "w": 0.9, "h": 0.9 }
+    }
+  }
+}

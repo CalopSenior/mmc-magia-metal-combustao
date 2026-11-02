@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>M.M.C. — Golens de pedra</title>
+<style>
+@font-face{font-family:Pixelify;src:url('/fonts/pixelify-sans.ttf')}*{box-sizing:border-box}body{margin:0;background:#131c17;color:#d3d7bd;font:14px system-ui}main{max-width:1200px;margin:auto;padding:22px}h1,h2,button,label{font-family:Pixelify,monospace}h1{color:#efd092;margin:0 0 8px;font-size:28px}h2{font-size:17px;color:#efd092;margin:16px 0 8px}p{margin:8px 0 18px;line-height:1.5}canvas{display:block;width:100%;image-rendering:pixelated;border:1px solid #536044;background:#1b261e}nav{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}button,label{min-height:44px;padding:10px 14px;color:#eed29e;border:1px solid #6e6b47;background:#302e20;font-size:15px}button[aria-pressed=true]{background:#59613a;border-color:#e1b969}label{display:flex;gap:8px;align-items:center}a{color:#edcd94}output{font-variant-numeric:tabular-nums}#world{height:330px}#atlas{aspect-ratio:1152/246}#status{min-height:24px}@media(max-width:600px){main{padding:12px}#atlas{min-width:750px}.atlas-wrap{overflow-x:auto}#world{height:340px}}
+</style><main><h1>Golens de pedra · força rúnica</h1><p>Matrizes numéricas, sem imagens. O colosso mede 120×144 unidades no mundo; o minerador ocupa 64×64. Esta bancada não acessa saves.</p>
+<nav aria-label="Inspeção da arte"><button id="animate" aria-pressed="true">Pausar animação</button><button id="direction">Direção: sudeste</button><button id="cargo">Caixas: 50</button><label><input id="reduced" type="checkbox">Reduzir movimento</label><a href="/">Abrir jogo</a></nav>
+<div class="atlas-wrap"><canvas id="atlas" width="1152" height="246" role="img" aria-label="Comparação do minerador e do colosso pegando caixas, caminhando, esperando entregando e voltando vazio"></canvas></div>
+<h2>Transporte real entre Entrepostos</h2><nav><button id="block" aria-pressed="false">Bloquear destino</button><button id="pause-world" aria-pressed="false">Pausar fábrica</button><button id="zoom">Visão: aproximada</button></nav><p id="status" role="status"></p><canvas id="world" role="img" aria-label="Fábrica isolada com remessas reais e destino que pode ser bloqueado"></canvas></main>
+<script type="module">
+import { drawCarrierPortrait } from '/src/game/core/carrierRenderer.ts'
+import { CARRIER_UNLOAD_TICKS } from '/src/game/core/carrierMotion.ts'
+
+
+import { minerMatrix } from '/src/game/content/creatureSprites.ts'
+import { drawMatrix,structurePalette } from '/src/game/content/pixelMatrices.ts'
+import { Renderer } from '/src/game/core/renderer.ts'
+import { Camera } from '/src/game/core/camera.ts'
+import { Simulation } from '/src/game/core/simulation.ts'
+import { ChunkWorld } from '/src/game/world/ChunkWorld.ts'
+import { DEFAULT_SETTINGS } from '/src/game/config.ts'
+import { exhibitionRules } from '/src/game/content/exhibition.ts'
+import { DEFAULT_VISUAL_PREFERENCES } from '/src/game/visualPreferences.ts'
+const $=id=>document.getElementById(id),atlas=$('atlas'),ctx=atlas.getContext('2d'),canvas=$('world')
+const facing=['south-east','east','north-east','north','north-west','west','south-west','south'],names=['sudeste','leste','nordeste','norte','noroeste','oeste','sudoeste','sul']
+let moving=true,artTime=0,last=0,direction=0,amount=50,reduced=false,blocked=false,paused=false,zoomed=true,acc=0
+$('animate').onclick=()=>{moving=!moving;$('animate').textContent=moving?'Pausar animação':'Reproduzir animação';$('animate').setAttribute('aria-pressed',moving)}
+$('direction').onclick=()=>{direction=(direction+1)%8;$('direction').textContent='Direção: '+names[direction]}
+$('cargo').onclick=()=>{amount=amount===10?50:amount===50?100:10;$('cargo').textContent='Caixas: '+amount}
+$('reduced').onchange=event=>{reduced=event.target.checked;renderer.setVisualPreferences({...DEFAULT_VISUAL_PREFERENCES,reducedMotion:reduced})}
+const structures=[]
+function piece(type,q,r,direction=0,options={}){const s={id:structures.length+1,type,q,r,direction,size:1,inputs:{},output:null,recipe:null,progress:0,createdTick:0,workTicks:0,sourceResource:null,migrationPath:[],migrationProgress:0,migrationThreshold:50,laneOutputs:[],hp:1000,...options};structures.push(s);return s}
+const a=piece('depot',-6,1,0,{inputs:{'bloody-iron':100000},channel:1,crateSize:50}),b=piece('depot',6,1,0,{channel:1}),miner=piece('golem',-7,-2,0,{batch:2}),gnome=piece('gnome',8,1)
+piece('conveyor',7,1,0)
+const world=new ChunkWorld('CARRIER-ART',1),sim=new Simulation();sim.restore(0,null,DEFAULT_SETTINGS,{structures,inventory:{},deposits:{},nextStructureId:6,delivered:{},shipments:[]});sim.configure(exhibitionRules(),world);sim.ether=100000
+const receiver=sim.structureById(b.id),renderer=new Renderer(canvas),camera=new Camera();renderer.setVisualPreferences(DEFAULT_VISUAL_PREFERENCES)
+$('block').onclick=()=>{blocked=!blocked;receiver.output=blocked?{resource:'fossil-coal',amount:400}:null;$('block').textContent=blocked?'Liberar destino':'Bloquear destino';$('block').setAttribute('aria-pressed',blocked)}
+$('pause-world').onclick=()=>{paused=!paused;$('pause-world').textContent=paused?'Retomar fábrica':'Pausar fábrica';$('pause-world').setAttribute('aria-pressed',paused)}
+$('zoom').onclick=()=>{zoomed=!zoomed;camera.restore({x:0,y:0,zoom:zoomed?.9:.3});$('zoom').textContent=zoomed?'Visão: aproximada':'Visão: radar'}
+function resize(){const rect=canvas.getBoundingClientRect(),dpr=Math.min(2,devicePixelRatio);canvas.width=Math.round(rect.width*dpr);canvas.height=Math.round(rect.height*dpr);camera.resize(rect.width,rect.height);camera.restore({x:0,y:0,zoom:zoomed?.9:.3})}
+new ResizeObserver(resize).observe(canvas)
+function paint(){
+ ctx.fillStyle='#1b261e';ctx.fillRect(0,0,1152,246);ctx.textAlign='center';ctx.font='18px Pixelify';ctx.fillStyle='#edd29c'
+ const labels=['Minerador · 1 célula','Pegando a caixa','Passada com carga','Aguardando espaço','Entregando a caixa','Voltando vazio'];labels.forEach((label,i)=>ctx.fillText(label,96+i*192,24))
+ const progress=(artTime%2000)/2000,step=Math.floor(artTime/150)
+ for(let i=0;i<6;i++){const x=96+i*192;ctx.fillStyle='#101910';ctx.fillRect(x-70,205,140,6);if(i===0)drawMatrix(ctx,minerMatrix(0,true,step%4),structurePalette('golem'),x-32,140,4);else drawCarrierPortrait(ctx,x,136,144,['pickup','walk','carry','deliver','return'][i-1],i===1||i===4?progress:1,step,i===5?'west':facing[direction],amount,reduced)}
+ ctx.font='13px system-ui';ctx.fillStyle='#b7c5a1';ctx.fillText('Pedra, musgo e picareta',96,235);ctx.fillText('Braços erguem a carga',288,235);ctx.fillText('Pés alternados · caixa firme',480,235);ctx.fillText('A carga permanece nas mãos',672,235);ctx.fillText('Descarga após aceitação',864,235);ctx.fillText('Mesma criatura · sem caixas',1056,235)
+}
+function frame(now){const delta=last?Math.min(80,now-last):0;last=now;if(moving)artTime+=delta;if(!paused){acc+=delta;while(acc>=50){sim.step(world);sim.drainTransferMotions();sim.drainCues();sim.drainEvents();acc-=50;if(blocked)receiver.output={resource:'fossil-coal',amount:400}}}paint();renderer.render(world,camera,sim,null,Math.min(2,devicePixelRatio));$('status').textContent=`Tick ${sim.tick} · ${sim.shipments.filter(s=>s.deliveredAt===undefined).length} na ida · ${sim.shipments.filter(s=>s.deliveredAt!==undefined&&sim.tick>=s.deliveredAt+CARRIER_UNLOAD_TICKS).length} voltando vazio · Ferro recolhido: ${sim.inventory['bloody-iron']??0} · Destino ${blocked?'bloqueado: as caixas ficam com os golens':'livre: coleta e descarga reais'}`;requestAnimationFrame(frame)}
+resize();requestAnimationFrame(frame)
+</script></html>

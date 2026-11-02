@@ -1,0 +1,15 @@
+node_modules/
+dist/
+release/
+build/
+coverage/
+*.jks
+*.keystore
+android/local.properties
+app/android/local.properties
+app/android/.gradle/
+app/android/app/build/
+app/android/build/
+app/android/app/src/main/assets/public/
+.claude/settings.local.json
+*.log

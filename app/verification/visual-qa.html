@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>M.M.C. — Verificação visual</title>
+<style>
+  @font-face { font-family:'Pixelify Sans';src:url('/fonts/pixelify-sans.ttf') format('truetype');font-weight:400 700;font-display:swap }
+  * { box-sizing:border-box } body { margin:0;background:#0e151f;color:#d4deda;font:13px system-ui }
+  header { padding:24px 28px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #33434b }
+  h1 { font:600 22px 'Pixelify Sans',monospace;margin:0;color:#f2c876 } p { color:#bdaa87;margin:8px 0 0 }
+  a { color:#f2c876;font:16px 'Pixelify Sans',sans-serif;padding:10px;border:1px solid #806b4a;text-decoration:none;display:inline-block }
+  main { display:grid;grid-template-columns:2fr 1fr;gap:16px;padding:20px }
+  section { min-width:0;border:1px solid #33434b;background:#141e28 } h2 { font:12px ui-monospace,monospace;letter-spacing:1.5px;padding:14px 16px;margin:0;color:#84d8d1 }
+  canvas { display:block;width:100%;height:clamp(320px,calc(100dvh - 215px),580px) } small { color:#94aaa9 }
+  @media(max-width:700px) { main { grid-template-columns:1fr } canvas { height:400px } }
+</style>
+<header><div><h1>M.M.C. / ENGENHARIA VISUAL</h1><p>Pedra, madeira, cobre e runas · terreno em paleta reduzida</p></div><div><a href="/">Abrir jogo e HUD</a><p><small>Fábrica de teste isolada · sem acesso a saves</small></p></div></header>
+<main>
+  <section><h2>01 / FORJA 3×3 · SILO 2×2 · PIXELS DE 4 UNIDADES</h2><canvas id="detail"></canvas></section>
+  <section><h2>02 / RADAR DE FLUXOS · 30%</h2><canvas id="radar"></canvas></section>
+</main>
+<script type="module">
+  import { Renderer } from '/src/game/core/renderer.ts'
+  import { Camera } from '/src/game/core/camera.ts'
+  import { Simulation } from '/src/game/core/simulation.ts'
+  import { ChunkWorld } from '/src/game/world/ChunkWorld.ts'
+  import { DEFAULT_SETTINGS } from '/src/game/config.ts'
+  const structures = []
+  function machine(type, q, r, direction = 0, options = {}) {
+    structures.push({ id:structures.length+1,type,q,r,direction,inputs:{},output:null,recipe:null,progress:0,
+      createdTick:0,workTicks:14,sourceResource:null,migrationPath:[],migrationProgress:0,migrationThreshold:50,
+      laneOutputs:[],prismOutputCount:2,siloReleaseMultiple:4,...options })
+  }
+  machine('furnace',-1,-1,0,{size:3,recipe:'draconic-steel',progress:26,output:{resource:'draconic-steel',amount:2}})
+  machine('golem',-5,-1,0,{sourceResource:'bloody-iron'})
+  for(let q=-4;q<=-2;q++) machine('conveyor',q,-1)
+  machine('golem',-5,2,0,{sourceResource:'fossil-coal'})
+  machine('conveyor',-4,2); machine('conveyor',-3,2,2)
+  machine('conveyor',-3,1); machine('conveyor',-2,1)
+  machine('golem',-4,0); machine('conveyor',-3,0,5)
+  machine('conveyor',2,0); machine('conveyor',3,0,5); machine('conveyor',3,1,5)
+  machine('silo',3,2,0,{size:2,inputs:{'draconic-steel':12}}); machine('gnome',5,2)
+  machine('golem',-4,3); machine('conveyor',-3,3,1); machine('conveyor',-2,2,1)
+  const simulation = new Simulation()
+  simulation.restore(80,null,DEFAULT_SETTINGS,{structures,inventory:{},deposits:{},nextStructureId:structures.length+1})
+  const world = new ChunkWorld('DRAGON-DORSAL-01',1)
+  for (const [id,zoom] of [['detail',0.9],['radar',0.3]]) {
+    const canvas = document.getElementById(id)
+    const bounds = canvas.getBoundingClientRect()
+    const dpr = Math.min(devicePixelRatio,2)
+    canvas.width = bounds.width*dpr; canvas.height = bounds.height*dpr
+    const camera = new Camera(); camera.resize(bounds.width,bounds.height)
+    camera.restore({ x:0,y:48,zoom })
+    const renderer = new Renderer(canvas)
+    for(let i=0;i<24;i++) renderer.render(world,camera,simulation,null,dpr)
+  }
+</script>
+</html>

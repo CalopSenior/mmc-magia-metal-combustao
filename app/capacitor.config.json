@@ -1,0 +1,7 @@
+{
+  "appId": "br.mmc.magiametalcombustao",
+  "appName": "M.M.C.",
+  "webDir": "dist",
+  "backgroundColor": "#111a18",
+  "android": { "allowMixedContent": false }
+}
