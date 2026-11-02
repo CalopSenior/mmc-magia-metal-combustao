@@ -6,6 +6,7 @@ import { connectionForLane, outputDirections, portStub, type Connection, type Po
 
 const PIXEL = CELL_SIZE / 16
 const HALF_WIDTH = 3.5
+const TYPE_IDS = new Map<string, number>()
 
 export interface BeltTile {
   q: number; r: number
@@ -72,7 +73,12 @@ export class BeltRasterCache {
   get links(): readonly Connection[] { return this.connections }
 
   draw(context: CanvasRenderingContext2D, structures: readonly Structure[], lookup: StructureLookup, camera: Camera, frame: number): void {
-    const topology = structures.map((s) => `${s.id}:${s.type}:${s.q}:${s.r}:${s.size ?? 1}:${s.direction}:${s.prismOutputCount}`).join('|')
+    let a = 0x811c9dc5, b = 0x01000193
+    for (const s of structures) {
+      const parts = [s.id, TYPE_IDS.get(s.type) ?? TYPE_IDS.set(s.type, TYPE_IDS.size + 1).get(s.type)!, s.q, s.r, s.size ?? 1, s.direction, s.prismOutputCount]
+      for (const part of parts) { a = Math.imul(a ^ part, 0x01000193); b = Math.imul(b + part + 0x9e3779b9, 0x85ebca6b); b ^= b >>> 13 }
+    }
+    const topology = `${structures.length}:${a >>> 0}:${b >>> 0}`
     if (topology !== this.topology) {
       const incoming = new Set<number>(), paths: Point[][] = []
       this.connections = []

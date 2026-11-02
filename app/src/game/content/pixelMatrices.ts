@@ -360,7 +360,12 @@ export function pavingPalette(tier: number): string[] {
   return palette
 }
 
-export function drawMatrix(context: CanvasRenderingContext2D, matrix: PixelMatrix, palette: readonly string[], x: number, y: number, pixel: number): void {
+const SPRITE_LIMIT = 4000
+let sprites = new WeakMap<PixelMatrix, Map<string, HTMLCanvasElement | null>>()
+let spriteCount = 0
+
+/** Paints a matrix pixel by pixel. Used the first time a matrix is seen and for one-off matrices. */
+function paintMatrix(context: CanvasRenderingContext2D, matrix: PixelMatrix, palette: readonly string[], x: number, y: number, pixel: number): void {
   // Run-length batches reduce fill calls without introducing filtered bitmaps.
   for (let row = 0; row < matrix.length; row += 1) {
     for (let column = 0; column < matrix[row].length;) {
@@ -375,4 +380,34 @@ export function drawMatrix(context: CanvasRenderingContext2D, matrix: PixelMatri
       column = end
     }
   }
+}
+
+/**
+ * Draws a matrix. A matrix that is drawn again with the same palette and size is rasterised once into a small canvas and
+ * blitted afterwards: thousands of structures cost one drawImage each instead of dozens of fillRect calls.
+ */
+export function drawMatrix(context: CanvasRenderingContext2D, matrix: PixelMatrix, palette: readonly string[], x: number, y: number, pixel: number): void {
+  if (matrix.length < 6 || typeof document === 'undefined' || typeof context.getTransform !== 'function') { paintMatrix(context, matrix, palette, x, y, pixel); return }
+  const scale = context.getTransform().a || 1
+  const devicePixel = Math.round(pixel * scale * 100) / 100
+  const key = `${devicePixel}|${palette.join(',')}`
+  let byKey = sprites.get(matrix)
+  if (!byKey) { byKey = new Map(); sprites.set(matrix, byKey) }
+  const seen = byKey.get(key)
+  if (seen === undefined) { byKey.set(key, null); paintMatrix(context, matrix, palette, x, y, pixel); return }
+  let sprite = seen
+  if (!sprite) {
+    if (spriteCount >= SPRITE_LIMIT) { sprites = new WeakMap(); spriteCount = 0; paintMatrix(context, matrix, palette, x, y, pixel); return }
+    const width = matrix.reduce((most, row) => Math.max(most, row.length), 0)
+    sprite = document.createElement('canvas')
+    sprite.width = Math.max(1, Math.ceil(width * devicePixel)); sprite.height = Math.max(1, Math.ceil(matrix.length * devicePixel))
+    const painter = sprite.getContext('2d')
+    if (!painter) { paintMatrix(context, matrix, palette, x, y, pixel); return }
+    paintMatrix(painter, matrix, palette, 0, 0, devicePixel)
+    byKey.set(key, sprite); spriteCount += 1
+  }
+  const previous = context.imageSmoothingEnabled
+  context.imageSmoothingEnabled = false
+  context.drawImage(sprite, Math.round(x * scale) / scale, Math.round(y * scale) / scale, sprite.width / scale, sprite.height / scale)
+  context.imageSmoothingEnabled = previous
 }

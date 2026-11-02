@@ -4,7 +4,7 @@ import { structureMatrix } from '../content/orientedMatrices'
 import { STRUCTURES } from '../content/structures'
 import { CHUNK_SIZE } from '../config'
 import { CELL_SIZE, gridToWorld, worldToGrid } from '../math/grid'
-import type { Axial, HexCell, HexDirection, ResourceId, StructureType, TransferMotion } from '../types'
+import type { Axial, HexCell, HexDirection, ResourceId, Structure, StructureType, TransferMotion } from '../types'
 import type { ChunkWorld } from '../world/ChunkWorld'
 import { createSeedHash } from '../world/generation'
 import { colorCSS, interpolateField, sampleVisualTerrainField, terrainColor, terrainGrain } from '../world/topography'
@@ -31,6 +31,25 @@ interface TerrainCache {
   /** Packed colors are the source of truth; the canvas is only a numeric raster cache. */
   colors: Uint32Array
   pixels: number
+}
+
+const digestIds = new Map<string, number>()
+function textId(text: string | undefined): number {
+  if (text === undefined) return 0
+  let id = digestIds.get(text)
+  if (id === undefined) { id = digestIds.size + 1; digestIds.set(text, id) }
+  return id
+}
+
+/** A cheap numeric digest of everything about the structures that changes how they look, instead of building thousands of strings per frame. */
+function structuresDigest(structures: Iterable<Structure>): string {
+  let a = 0x811c9dc5, b = 0x01000193, count = 0
+  for (const s of structures) {
+    const parts = [s.id, s.q, s.r, s.size ?? 1, s.direction, textId(s.output?.resource), s.output?.amount ?? -1, s.prismOutputCount, s.siloReleaseMultiple, s.channelColors ? textId(s.channelColors.join(',')) : 0]
+    for (const part of parts) { a = Math.imul(a ^ part, 0x01000193); b = Math.imul(b + part + 0x9e3779b9, 0x85ebca6b); b ^= b >>> 13 }
+    count += 1
+  }
+  return `${count}:${a >>> 0}:${b >>> 0}`
 }
 
 export class Renderer {
@@ -113,7 +132,7 @@ export class Renderer {
     this.transferMotions = radar || this.preferences.reducedMotion ? [] : this.transferMotions.filter((motion) => timestamp < motion.startedAt + motion.durationMs)
     const selected = simulation.selected
     // Simulation tick invalidates state changes even while paused after rotate/build.
-    const structureKey = Array.from(simulation.structures, (s) => `${s.id}:${s.q}:${s.r}:${s.size ?? 1}:${s.direction}:${s.output?.resource}:${s.output?.amount}:${s.prismOutputCount}:${s.siloReleaseMultiple}:${s.channelColors?.join(',')}`).join(';')
+    const structureKey = structuresDigest(simulation.structures)
     const key = [world.seed, camera.viewX, camera.viewY, camera.currentZoom, camera.viewportWidth, camera.viewportHeight, dpr,
       simulation.structureCount || this.hasEmptyDeposits ? simulation.tick : 0, structureKey, selected?.q, selected?.r, hovered?.q, hovered?.r, simulation.currentSettings.showCoordinates,
       this.lod, this.transferMotions.length ? Math.floor(timestamp / 33) : 0, JSON.stringify(this.overlay), simulation.bounds, simulation.monsterCount].join('|')
