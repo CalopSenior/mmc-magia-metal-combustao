@@ -1,6 +1,6 @@
 /** Where the installers live: assets of a GitHub Release, so the game itself stays a small web page. */
 export const REPOSITORY = 'CalopSenior/mmc-magia-metal-combustao'
-export const RELEASE_VERSION = '1.0.0'
+export const RELEASE_VERSION = '1.1.0'
 export const REPOSITORY_URL = `https://github.com/${REPOSITORY}`
 
 export type PlatformId = 'windows' | 'linux' | 'android'
