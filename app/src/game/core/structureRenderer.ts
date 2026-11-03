@@ -43,7 +43,7 @@ function visible(camera: Camera, point: Point, margin: number): boolean {
 function drawRadar(context: CanvasRenderingContext2D, simulation: Simulation, camera: Camera): void {
   const half = CELL_SIZE * camera.currentZoom / 2
   context.lineCap = 'butt'; context.lineJoin = 'miter'
-  for (const source of simulation.structures) {
+  for (const source of simulation.liveStructures) {
     if (!visible(camera, screen(camera, structureCenter(source)), half * (structureSize(source) + 2))) continue
     outputDirections(source).forEach((_, lane) => {
       const connection = connectionForLane(source, lane, (q, r) => simulation.structureAtCoords(q, r))
@@ -63,7 +63,7 @@ function drawRadar(context: CanvasRenderingContext2D, simulation: Simulation, ca
       context.fillRect(arrow.x - 1.5, arrow.y - 1.5, 3, 3)
     })
   }
-  for (const structure of simulation.structures) {
+  for (const structure of simulation.liveStructures) {
     const point = screen(camera, movingPosition(structure)), footprint = structureSize(structure)
     if (!visible(camera, point, half * (footprint + 2))) continue
     const radius = Math.max(2, half * (structure.type === 'conveyor' ? 0.15 : footprint * 0.8))
@@ -92,10 +92,11 @@ export function drawStructures(
   if (lod === 'radar') { drawRadar(context, simulation, camera); return }
   const cellSize = CELL_SIZE * camera.currentZoom, pixel = cellSize / 16
   const animation = preferences.reducedMotion ? 0 : Math.floor(tick / 3) % 4
-  const structures = Array.from(simulation.structures)
+  const view = camera.visibleCells(CELL_SIZE)
+  const structures = simulation.visibleStructures(view.minQ, view.minR, view.maxQ, view.maxR)
   let belts = beltCaches.get(simulation)
   if (!belts) { belts = new BeltRasterCache(); beltCaches.set(simulation, belts) }
-  belts.draw(context, structures, (q,r) => simulation.structureAtCoords(q,r), camera, animation)
+  belts.draw(context, simulation.liveStructures, (q,r) => simulation.structureAtCoords(q,r), camera, animation)
   const inputPorts = new Map<number, Connection[]>()
   for (const connection of belts.links) {
     const ports = inputPorts.get(connection.target.id) ?? []

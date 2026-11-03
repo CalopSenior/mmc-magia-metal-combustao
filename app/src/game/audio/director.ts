@@ -59,7 +59,7 @@ export class FactoryAudio {
     for (const pool of this.pools.values()) pool.length = 0
     const monsters = simulation.monsterCount
     let working = 0, loudness = 0
-    for (const structure of simulation.structures) {
+    for (const structure of simulation.liveStructures) {
       const kind = ambientKindOf(structure, monsters)
       if (!kind) continue
       if (kind !== 'belts') working += 1

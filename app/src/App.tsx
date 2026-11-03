@@ -4,6 +4,7 @@ import { CreditsScreen } from '@/components/menu/CreditsScreen'
 import { MainMenu } from '@/components/menu/MainMenu'
 import { SettingsScreen } from '@/components/menu/SettingsScreen'
 import { SlotSelect } from '@/components/menu/SlotSelect'
+import { PerfOverlay } from '@/components/game/PerfOverlay'
 import { DownloadsScreen } from '@/components/menu/DownloadsScreen'
 import { HowToPlay } from '@/components/menu/HowToPlay'
 import { CodexDialog } from '@/components/game/CodexDialog'
@@ -38,6 +39,7 @@ export default function App() {
     {screen.name === 'credits' && <CreditsScreen onBack={goMenu} />}
     {screen.name === 'game' && <GameScreen key={screen.slot} slot={screen.slot} preferences={preferences} onPreferences={updatePreferences} onExit={goMenu} />}
     <CodexDialog open={codexOpen} onOpenChange={setCodexOpen} target={codexTarget} onSelect={setCodexTarget} profile={READER_PROFILE} freeMode onLessonRead={()=>{}}/>
+    {preferences.perfOverlay && <PerfOverlay />}
     <Toaster theme="dark" position="top-center" richColors closeButton />
   </>
 }

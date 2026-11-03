@@ -58,6 +58,15 @@ export class Camera {
     this.zoomAt(this.width / 2, this.height / 2, this.zoom * factor)
   }
 
+  /** The cells on screen, plus `margin` cells all around (inclusive bounds). */
+  visibleCells(cellSize: number, margin = 4): { minQ: number; minR: number; maxQ: number; maxR: number } {
+    const topLeft = this.screenToWorld(0, 0), bottomRight = this.screenToWorld(this.viewportWidth, this.viewportHeight)
+    return {
+      minQ: Math.floor(Math.min(topLeft.x, bottomRight.x) / cellSize) - margin, maxQ: Math.ceil(Math.max(topLeft.x, bottomRight.x) / cellSize) + margin,
+      minR: Math.floor(Math.min(topLeft.y, bottomRight.y) / cellSize) - margin, maxR: Math.ceil(Math.max(topLeft.y, bottomRight.y) / cellSize) + margin,
+    }
+  }
+
   screenToWorld(screenX: number, screenY: number): Point {
     return {
       x: (screenX - this.width / 2) / this.zoom + this.x,

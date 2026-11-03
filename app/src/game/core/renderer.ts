@@ -132,7 +132,8 @@ export class Renderer {
     this.transferMotions = radar || this.preferences.reducedMotion ? [] : this.transferMotions.filter((motion) => timestamp < motion.startedAt + motion.durationMs)
     const selected = simulation.selected
     // Simulation tick invalidates state changes even while paused after rotate/build.
-    const structureKey = structuresDigest(simulation.structures)
+    const view = camera.visibleCells(CELL_SIZE)
+    const structureKey = structuresDigest(simulation.visibleStructures(view.minQ, view.minR, view.maxQ, view.maxR))
     const key = [world.seed, camera.viewX, camera.viewY, camera.currentZoom, camera.viewportWidth, camera.viewportHeight, dpr,
       simulation.structureCount || this.hasEmptyDeposits ? simulation.tick : 0, structureKey, selected?.q, selected?.r, hovered?.q, hovered?.r, simulation.currentSettings.showCoordinates,
       this.lod, this.transferMotions.length ? Math.floor(timestamp / 33) : 0, JSON.stringify(this.overlay), simulation.bounds, simulation.monsterCount].join('|')

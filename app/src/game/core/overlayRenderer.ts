@@ -135,7 +135,8 @@ export function drawOverlays(
   if (!simulation.strict) return
   const cellSize = CELL_SIZE * camera.currentZoom
   const warnings = options.forecast ? simulation.forecast() : null
-  for (const structure of simulation.structures) {
+  const view = camera.visibleCells(CELL_SIZE)
+  for (const structure of simulation.visibleStructures(view.minQ, view.minR, view.maxQ, view.maxR)) {
     const center = structureCenter(structure), p = camera.worldToScreen(center.x, center.y)
     const size = cellSize * structureSize(structure)
     if (p.x < -size || p.y < -size || p.x > camera.viewportWidth + size || p.y > camera.viewportHeight + size) continue

@@ -84,7 +84,8 @@ export interface Connection {
   direction: HexDirection; path: Point[]
 }
 
-export function connectionForLane(source: Structure, lane: number, lookup: StructureLookup): Connection | null {
+/** `withPath` false skips building the animation polyline (the simulation only needs the target). */
+export function connectionForLane(source: Structure, lane: number, lookup: StructureLookup, withPath = true): Connection | null {
   const direction = outputDirections(source)[lane]
   if (direction === undefined) return null
   const destination = outputTargetCell(source, direction)
@@ -92,6 +93,7 @@ export function connectionForLane(source: Structure, lane: number, lookup: Struc
   if (!target) return null
   const targetLane = targetLaneForSource(target, source, direction)
   if (targetLane < 0) return null
+  if (!withPath) return { source, target, sourceLane: lane, targetLane, direction, path: [] }
   const exit = gridToWorld(portCell(source, direction)), entry = gridToWorld(destination)
   const path = [...orthogonalPath(structureCenter(source), exit), ...orthogonalPath(exit, entry).slice(1), ...orthogonalPath(entry, structureCenter(target)).slice(1)]
   return { source, target, sourceLane: lane, targetLane, direction, path }

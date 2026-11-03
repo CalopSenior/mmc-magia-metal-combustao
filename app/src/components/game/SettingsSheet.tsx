@@ -25,6 +25,7 @@ import { Switch } from '@/components/ui/switch'
 import type { ChunkDistance, EngineSnapshot, SaveStatus, SimulationSpeed } from '@/game/types'
 import type { VisualPreferences } from '@/game/visualPreferences'
 import { AccessibilitySettings } from './AccessibilitySettings'
+import { PerformanceSettings } from './PerformanceSettings'
 import { AudioSettings } from './AudioSettings'
 
 interface SettingsSheetProps {
@@ -105,6 +106,7 @@ export function SettingsSheet({
           <AudioSettings />
           <div className="border-t border-[#4a3c29]" />
           <AccessibilitySettings preferences={preferences} onChange={onPreferences} />
+          <PerformanceSettings preferences={preferences} onChange={onPreferences} />
           <section className="space-y-4" aria-labelledby="simulation-settings">
             <div className="flex items-center gap-2 text-[#e9b969]">
               <Gauge className="h-4 w-4" />

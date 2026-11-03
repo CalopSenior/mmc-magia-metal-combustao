@@ -1,3 +1,4 @@
+import { perf, type PhaseTimes } from '../perf'
 import {
   AUTOSAVE_INTERVAL_MS,
   DEFAULT_SEED,
@@ -89,6 +90,7 @@ export class GameEngine {
   private autosaveElapsed = 0
   private snapshotElapsed = SNAPSHOT_INTERVAL_MS
   private fpsElapsed = 0
+  private lastPhases: PhaseTimes = { simulation: 0, ticks: 0, audio: 0, render: 0 }
   private fpsFrames = 0
   private fps = 60
   private dpr = 1
@@ -351,6 +353,9 @@ export class GameEngine {
 
   private readonly frame = (timestamp: number): void => {
     if (!this.running || this.disposed) return
+    const frameStart = performance.now()
+    let simStart = 0, simTime = 0, simSteps = 0
+    if (this.lastFrameTime !== null) perf.record(timestamp - this.lastFrameTime, this.lastPhases)
     const delta = this.lastFrameTime === null ? 0 : Math.min(timestamp - this.lastFrameTime, MAX_FRAME_DELTA_MS)
     this.lastFrameTime = timestamp
     this.fpsElapsed += delta
@@ -364,6 +369,7 @@ export class GameEngine {
     if (!this.paused && !this.suspended && !document.hidden) {
       this.accumulator += delta * this.simulation.currentSettings.speed * (this.calmPace ? CALM_PACE : 1)
       let steps = 0
+      simStart = performance.now()
       while (this.accumulator >= SIMULATION_STEP_MS) {
         this.simulation.step(this.world)
         this.dirty = true
@@ -371,6 +377,8 @@ export class GameEngine {
         this.accumulator -= SIMULATION_STEP_MS
         steps += 1
       }
+      simSteps = steps
+      simTime = performance.now() - simStart
       if (steps > 0) {
         this.profile.playTicks += steps
         this.pumpEvents()
@@ -388,8 +396,12 @@ export class GameEngine {
 
     this.camera.clampTo(this.simulation.bounds, CELL_SIZE)
     this.updateCenter()
+    const audioStart = performance.now()
     this.sound.update(this.simulation, this.camera, this.loaded && !this.paused && !this.suspended && !document.hidden, delta)
+    const renderStart = performance.now()
     this.renderer.render(this.world, this.camera, this.simulation, this.hovered, this.dpr)
+    this.lastPhases = { simulation: simTime, ticks: simSteps, audio: renderStart - audioStart, render: performance.now() - renderStart }
+    void frameStart
     if (!this.ready) {
       this.ready = true
       window.__GAME_READY__ = true

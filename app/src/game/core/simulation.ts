@@ -69,7 +69,7 @@ import type {
 import type { ChunkWorld } from '../world/ChunkWorld'
 import type { BeltStep } from './beltStroke'
 import { insideBounds, isLiquid, isObstacle } from '../world/contractMap'
-import { connectionForLane, containsCell, footprintCells, outputDirections, structureSize, type Point } from './structureGeometry'
+import { connectionForLane, containsCell, footprintCells, outputDirections, structureSize } from './structureGeometry'
 import {
   acceptsResource,
   applyRepair,
@@ -105,7 +105,6 @@ import {
 type CellWorld = Pick<ChunkWorld, 'getCell'>
 
 interface TransferPlan {
-  readonly path: Point[]
   readonly source: Structure
   readonly target: Structure
   readonly resource: ResourceId
@@ -201,6 +200,55 @@ export class Simulation implements RuleHost {
 
   get structureList(): Structure[] {
     return this.listCache??(this.listCache=Array.from(this.structuresMap.values()))
+  }
+
+  /** Bumped whenever a structure is added or removed (a golem trampling a floor is not a layout change for the machines). */
+  private layoutVersion = 0
+  private liveCache: { version: number; list: Structure[] } | null = null
+  private spatialCache: { version: number; cells: Map<number, Structure[]>; golems: Structure[] } | null = null
+
+  private invalidateLayout(): void {
+    this.listCache = null
+    this.layoutVersion += 1
+  }
+
+  /** Everything except floors and lanterns: the only structures the clock has to look at every tick. */
+  get liveStructures(): Structure[] {
+    if (this.liveCache?.version !== this.layoutVersion) this.liveCache = { version: this.layoutVersion, list: this.structureList.filter((structure) => !isDecor(structure.type)) }
+    return this.liveCache.list
+  }
+
+  /**
+   * The structures that may touch the rectangle of cells (inclusive), found through a grid of 16 × 16 buckets instead of scanning the
+   * whole map. Golems move, so they are always returned and the caller culls them. The result is in id order, like the full list.
+   */
+  visibleStructures(minQ: number, minR: number, maxQ: number, maxR: number): Structure[] {
+    if (this.spatialCache?.version !== this.layoutVersion) {
+      const cells = new Map<number, Structure[]>(), golems: Structure[] = []
+      for (const structure of this.structureList) {
+        if (structure.type === 'golem') { golems.push(structure); continue }
+        const size = structure.size ?? 1
+        for (let bq = Math.floor(structure.q / 16); bq <= Math.floor((structure.q + size - 1) / 16); bq += 1) {
+          for (let br = Math.floor(structure.r / 16); br <= Math.floor((structure.r + size - 1) / 16); br += 1) {
+            const key = (bq + 512) * 1024 + (br + 512)
+            const bucket = cells.get(key)
+            if (bucket) bucket.push(structure); else cells.set(key, [structure])
+          }
+        }
+      }
+      this.spatialCache = { version: this.layoutVersion, cells, golems }
+    }
+    const { cells, golems } = this.spatialCache
+    const found = new Set<Structure>()
+    for (let bq = Math.floor(minQ / 16); bq <= Math.floor(maxQ / 16); bq += 1) {
+      for (let br = Math.floor(minR / 16); br <= Math.floor(maxR / 16); br += 1) {
+        for (const structure of cells.get((bq + 512) * 1024 + (br + 512)) ?? []) found.add(structure)
+      }
+    }
+    const result: Structure[] = []
+    for (const structure of found) if (this.idIndex.has(structure.id)) result.push(structure)
+    for (const golem of golems) if (this.idIndex.has(golem.id)) result.push(golem)
+    return result.sort((a, b) => a.id - b.id)
   }
 
   configure(rules: RulesConfig | null, world: CellWorld | null): void {
@@ -410,7 +458,7 @@ export class Simulation implements RuleHost {
     this.nextStructureId += 1
     this.structuresMap.set(cell.key, structure)
     this.idIndex.set(structure.id,structure)
-    this.listCache=null
+    this.invalidateLayout()
     this.occupy(structure)
     this.stats.peakMachines = Math.max(this.stats.peakMachines, this.structuresMap.size - this.decorCount)
     this.cueAtStructure('build', structure)
@@ -440,7 +488,7 @@ export class Simulation implements RuleHost {
       this.vacate(floor)
       this.structuresMap.delete(hexKey(floor.q, floor.r))
       this.idIndex.delete(floor.id)
-      this.listCache = null
+      this.invalidateLayout()
     }
   }
 
@@ -513,7 +561,7 @@ export class Simulation implements RuleHost {
     this.vacate(structure)
     this.structuresMap.delete(hexKey(structure.q, structure.r))
     this.idIndex.delete(structure.id)
-    this.listCache=null
+    this.invalidateLayout()
     this.migrationSearchCooldown.delete(structure.id)
     this.flowWindow.delete(structure.id)
     if (this.selectedHex && containsCell(structure, this.selectedHex)) this.selectedHex = null
@@ -697,7 +745,7 @@ export class Simulation implements RuleHost {
     const restored = factory ?? createInitialFactoryState()
     this.structuresMap = new Map(restored.structures.map((structure) => [hexKey(structure.q, structure.r), cloneStructure(structure)]))
     this.idIndex.clear()
-    this.listCache=null
+    this.invalidateLayout()
     for(const structure of this.structuresMap.values()) this.idIndex.set(structure.id,structure)
     this.occupancy.clear()
     for (const structure of this.structuresMap.values()) this.occupy(structure)
@@ -874,7 +922,7 @@ export class Simulation implements RuleHost {
   private resetFactory(inventory?: ResourceInventory): void {
     const initial = createInitialFactoryState(inventory)
     this.structuresMap = new Map()
-    this.listCache=null
+    this.invalidateLayout()
     this.idIndex.clear()
     this.occupancy.clear()
     this.inventoryState = initial.inventory
@@ -896,7 +944,7 @@ export class Simulation implements RuleHost {
   private updateProduction(world: CellWorld): void {
     this.activeDeposits.clear()
     this.productionScratch.length = 0
-    for (const structure of this.structuresMap.values()) this.productionScratch.push(structure)
+    for (const structure of this.liveStructures) this.productionScratch.push(structure)
     const strict = this.strict
     let workers = strict ? this.productionScratch.reduce((count, structure) => count + (structure.type === 'gnomepost' && structure.worker ? 1 : 0), 0) : 0
     for (const structure of this.productionScratch) {
@@ -999,14 +1047,13 @@ export class Simulation implements RuleHost {
   /** Steps from the golem to a free cell touching the collection point (empty when it already touches it), or null. */
   private pathToCollector(golem: Structure, point: Structure): Axial[] | null {
     if (hexDistance(golem, point) <= 1) return []
-    const search = this.explore(golem, COLLECTOR_WALK_LIMIT)
-    let goal: string | null = null
-    for (const node of search.order) if (hexDistance(node, point) <= 1) { goal = hexKey(node.q, node.r); break }
-    return goal ? this.pathFrom(search, goal) : null
+    const search = this.explore(golem, COLLECTOR_WALK_LIMIT, (node) => hexDistance(node, point) <= 1)
+    return search.found ? this.pathFrom(search, search.found) : null
   }
 
   /** Breadth-first walk over free cells (floors do not stop a golem), inside the map and within `limit` steps. */
-  private explore(origin: Axial, limit: number): { order: Axial[]; parents: Map<string, string | null>; steps: Map<string, number> } {
+  /** `stop` ends the search at the first cell it accepts (the same cell a full search would have listed first). */
+  private explore(origin: Axial, limit: number, stop?: (node: Axial) => boolean): { order: Axial[]; parents: Map<string, string | null>; steps: Map<string, number>; found: string | null } {
     const originKey = hexKey(origin.q, origin.r)
     const order: Axial[] = [{ q: origin.q, r: origin.r }]
     const parents = new Map<string, string | null>([[originKey, null]])
@@ -1025,9 +1072,10 @@ export class Simulation implements RuleHost {
         parents.set(nextKey, hexKey(current.q, current.r))
         steps.set(nextKey, here + 1)
         order.push(next)
+        if (stop?.(next)) return { order, parents, steps, found: nextKey }
       }
     }
-    return { order, parents, steps }
+    return { order, parents, steps, found: null }
   }
 
   private pathFrom(search: { order: Axial[]; parents: Map<string, string | null> }, goal: string): Axial[] {
@@ -1081,8 +1129,8 @@ export class Simulation implements RuleHost {
     if (errand.wait > 0) return
     if (this.strict) collectFrom(this, structure)
     structure.errand = undefined
-    const search = this.explore(structure, MIGRATION_WALK_LIMIT)
     const goal = hexKey(errand.target.q, errand.target.r)
+    const search = this.explore(structure, MIGRATION_WALK_LIMIT, (node) => hexKey(node.q, node.r) === goal)
     if (search.parents.has(goal) && !this.occupancy.get(goal)) {
       structure.migrationPath = this.pathFrom(search, goal)
       structure.migrationProgress = 0
@@ -1124,7 +1172,7 @@ export class Simulation implements RuleHost {
   }
 
   private isMigrationReservedCell(cell: Axial): boolean {
-    for (const structure of this.structuresMap.values()) {
+    for (const structure of this.liveStructures) {
       if (structure.type !== 'golem') continue
       if (structure.migrationPath.some((step) => step.q === cell.q && step.r === cell.r)) return true
       if (structure.errand && structure.errand.target.q === cell.q && structure.errand.target.r === cell.r) return true
@@ -1135,7 +1183,7 @@ export class Simulation implements RuleHost {
   private chargedEnergizers(): { x: number; y: number; boost: number }[] {
     const boosters: { x: number; y: number; boost: number }[] = []
     if (!this.strict) return boosters
-    for (const structure of this.structuresMap.values()) {
+    for (const structure of this.liveStructures) {
       const boost = structure.type === 'energizer' ? energizerMultiplier(structure) : 1
       if (boost > 1) boosters.push({ x: structure.q + 0.5, y: structure.r + 0.5, boost })
     }
@@ -1203,22 +1251,22 @@ export class Simulation implements RuleHost {
     this.prepareLogisticsOutputs()
     const plans: TransferPlan[] = []
     const reservations = new Map<string, ResourceInventory>()
-    for (const source of this.structuresMap.values()) {
+    for (const source of this.liveStructures) {
       if (source.type === 'gnome' || source.type === 'tower' || source.type === 'gnomepost') continue
       if (strict && (isBroken(source) || this.tickCount % this.periodOf(source) !== 0)) continue
       const laneCount = source.type === 'prism' ? source.prismOutputCount : source.type === 'bridge' ? 2 : 1
       for (let sourceLane = 0; sourceLane < laneCount; sourceLane += 1) {
         const output = sourceStack(source, sourceLane)
         if (!output) continue
-        const connection = connectionForLane(source, sourceLane, (q, r) => this.structureAtCoords(q, r))
+        const connection = connectionForLane(source, sourceLane, (q, r) => this.structureAtCoords(q, r), false)
         if (!connection) continue
-        const { target, targetLane, path } = connection
+        const { target, targetLane } = connection
         const reservationKey = `${hexKey(target.q, target.r)}:${targetLane}`
         const reserved = reservations.get(reservationKey) ?? {}
         if (!this.canAccept(target, targetLane, output.resource, reserved, output.scale ?? 1)) continue
         reserved[output.resource] = (reserved[output.resource] ?? 0) + 1
         reservations.set(reservationKey, reserved)
-        plans.push({ source, target, resource: output.resource, scale: output.scale ?? 1, sourceLane, targetLane, path })
+        plans.push({ source, target, resource: output.resource, scale: output.scale ?? 1, sourceLane, targetLane })
       }
     }
     const startedAt = performance.now()
@@ -1252,7 +1300,7 @@ export class Simulation implements RuleHost {
         else target.output = { resource, amount: 1 }
       } else if (target.type === 'bridge') target.laneOutputs[targetLane] = { resource, amount: 1, ...(scale > 1 ? { scale } : {}) }
       this.transferMotions.push({
-        path: plan.path,
+        path: connectionForLane(source, sourceLane, (q, r) => this.structureAtCoords(q, r))?.path,
         resource,
         from: { q: source.q, r: source.r },
         to: { q: target.q, r: target.r },
@@ -1265,7 +1313,7 @@ export class Simulation implements RuleHost {
   }
 
   private prepareLogisticsOutputs(): void {
-    for (const structure of this.structuresMap.values()) {
+    for (const structure of this.liveStructures) {
       if (this.strict && isBroken(structure)) continue
       if (structure.type === 'prism') this.preparePrismOutputs(structure)
       else if (structure.type === 'silo') this.prepareSiloOutput(structure)

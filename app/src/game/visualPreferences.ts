@@ -9,11 +9,13 @@ export interface VisualPreferences {
   colorblind: boolean
   /** Slows the whole factory clock, for readers who want more time to think. */
   calmPace: boolean
+  /** Frame-time meter (FPS, 1 % low, graph) over the game. */
+  perfOverlay: boolean
 }
 
 export const VISUAL_PREFERENCES_KEY = 'mmc-visual-preferences-v1'
 export const DEFAULT_VISUAL_PREFERENCES: VisualPreferences = {
-  font: 'pixel', largeText: false, grid: 'subtle', highContrast: false, reducedMotion: false, colorblind: false, calmPace: false,
+  font: 'pixel', largeText: false, grid: 'subtle', highContrast: false, reducedMotion: false, colorblind: false, calmPace: false, perfOverlay: false,
 }
 
 export function normalizeVisualPreferences(value: unknown, defaults = DEFAULT_VISUAL_PREFERENCES): VisualPreferences {
@@ -26,6 +28,7 @@ export function normalizeVisualPreferences(value: unknown, defaults = DEFAULT_VI
     reducedMotion: typeof data.reducedMotion === 'boolean' ? data.reducedMotion : defaults.reducedMotion,
     colorblind: typeof data.colorblind === 'boolean' ? data.colorblind : defaults.colorblind,
     calmPace: typeof data.calmPace === 'boolean' ? data.calmPace : defaults.calmPace,
+    perfOverlay: typeof data.perfOverlay === 'boolean' ? data.perfOverlay : defaults.perfOverlay,
   }
 }
 

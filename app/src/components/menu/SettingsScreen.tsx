@@ -1,6 +1,7 @@
 import { ArrowLeft } from 'lucide-react'
 import { AccessibilitySettings } from '@/components/game/AccessibilitySettings'
 import { AudioSettings } from '@/components/game/AudioSettings'
+import { PerformanceSettings } from '@/components/game/PerformanceSettings'
 import type { VisualPreferences } from '@/game/visualPreferences'
 
 export function SettingsScreen({ preferences, onPreferences, onBack }: {
@@ -16,6 +17,8 @@ export function SettingsScreen({ preferences, onPreferences, onBack }: {
         <AudioSettings />
         <div className="my-5 border-t border-[#584a35]" />
         <AccessibilitySettings preferences={preferences} onChange={onPreferences} />
+        <div className="my-5 border-t border-[#584a35]" />
+        <PerformanceSettings preferences={preferences} onChange={onPreferences} />
         <p className="mt-5 border-t border-[#584a35] pt-4 text-sm leading-relaxed text-[#c5b69c]">
           Dentro de cada save você também encontra os ajustes da fábrica: velocidade do relógio, seed da Oficina livre,
           exportação e importação do save em JSON.
